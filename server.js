@@ -22,7 +22,7 @@ const OUTPUT_DIR = path.join(__dirname, "output");
 app.use(cors());
 app.use(express.json());
 app.use("/output", express.static(OUTPUT_DIR));
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, )));
 
 const upload = multer({
   dest: UPLOAD_DIR,
