@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Product Video Generator</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --card: #171a21;
+    --accent: #6c5ce7;
+    --accent-2: #00d2a8;
+    --text: #eaeaf0;
+    --muted: #9aa0ac;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 40px 16px;
+  }
+  .wrap { max-width: 720px; width: 100%; }
+  h1 { font-size: 28px; margin-bottom: 4px; }
+  p.sub { color: var(--muted); margin-top: 0; margin-bottom: 28px; }
+  .card {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 20px;
+    border: 1px solid #262a35;
+  }
+  label { display: block; margin-bottom: 6px; font-size: 14px; color: var(--muted); }
+  input[type=text] {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #2c303c;
+    background: #0f1115;
+    color: var(--text);
+    margin-bottom: 16px;
+    font-size: 14px;
+  }
+  .dropzone {
+    border: 2px dashed #363b48;
+    border-radius: 12px;
+    padding: 28px;
+    text-align: center;
+    cursor: pointer;
+    margin-bottom: 16px;
+    transition: border-color 0.2s;
+  }
+  .dropzone:hover { border-color: var(--accent); }
+  .dropzone img { max-height: 160px; border-radius: 8px; margin-top: 12px; }
+  button {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .status { margin-top: 16px; font-size: 14px; color: var(--muted); }
+  .result-card {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 16px;
+    border: 1px solid #262a35;
+  }
+  .result-card h3 { margin: 0 0 8px 0; font-size: 16px; }
+  .result-card p { color: var(--muted); font-size: 13px; margin: 4px 0 12px 0; }
+  video { width: 100%; border-radius: 10px; background: black; }
+  .error { color: #ff6b6b; margin-top: 12px; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎬 Product Video Generator</h1>
+  <p class="sub">Upload a product photo → get 3 AI-generated angle videos with auto voiceover.</p>
+
+  <div class="card">
+    <label for="photo">Product photo</label>
+    <div class="dropzone" id="dropzone">
+      <span id="dropzoneText">Click to choose a photo (or drag & drop)</span>
+      <div><img id="preview" style="display:none;" /></div>
+    </div>
+    <input type="file" id="photo" accept="image/*" style="display:none;" />
+
+    <label for="productName">Product name (optional)</label>
+    <input type="text" id="productName" placeholder="e.g. Aurora Wireless Earbuds" />
+
+    <label for="productHint">Extra context (optional)</label>
+    <input type="text" id="productHint" placeholder="e.g. Targeting Gen Z, playful tone, matte black finish" />
+
+    <button id="generateBtn">Generate Videos</button>
+    <div class="status" id="status"></div>
+    <div class="error" id="error"></div>
+  </div>
+
+  <div id="results"></div>
+</div>
+
+<script>
+  const dropzone = document.getElementById("dropzone");
+  const photoInput = document.getElementById("photo");
+  const preview = document.getElementById("preview");
+  const dropzoneText = document.getElementById("dropzoneText");
+  const generateBtn = document.getElementById("generateBtn");
+  const statusEl = document.getElementById("status");
+  const errorEl = document.getElementById("error");
+  const resultsEl = document.getElementById("results");
+
+  dropzone.addEventListener("click", () => photoInput.click());
+  photoInput.addEventListener("change", () => {
+    const file = photoInput.files[0];
+    if (!file) return;
+    preview.src = URL.createObjectURL(file);
+    preview.style.display = "block";
+    dropzoneText.textContent = file.name;
+  });
+
+  generateBtn.addEventListener("click", async () => {
+    errorEl.textContent = "";
+    resultsEl.innerHTML = "";
+    const file = photoInput.files[0];
+    if (!file) {
+      errorEl.textContent = "Please choose a product photo first.";
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("photo", file);
+    formData.append("productName", document.getElementById("productName").value);
+    formData.append("productHint", document.getElementById("productHint").value);
+
+    generateBtn.disabled = true;
+    statusEl.textContent = "Generating your videos — this can take a few minutes (video generation + voiceover for 3 angles)...";
+
+    try {
+      const res = await fetch("/api/generate", { method: "POST", body: formData });
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || "Something went wrong.");
+
+      statusEl.textContent = "Done! Here are your videos:";
+      data.results.forEach((r) => {
+        const card = document.createElement("div");
+        card.className = "result-card";
+        card.innerHTML = `
+          <h3>${r.angle}</h3>
+          <p>"${r.voiceover}"</p>
+          <video controls src="${r.videoUrl}"></video>
+        `;
+        resultsEl.appendChild(card);
+      });
+    } catch (err) {
+      errorEl.textContent = err.message;
+      statusEl.textContent = "";
+    } finally {
+      generateBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
