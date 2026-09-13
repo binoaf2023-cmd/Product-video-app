@@ -1,50 +1,21 @@
-const jwt = require("jsonwebtoken");
 const axios = require("axios");
 
-const KLING_API_BASE = process.env.KLING_API_BASE || "https://api.klingai.com";
-
-/**
- * Kling AI uses short-lived JWTs (HS256) signed with your Access Key / Secret Key
- * instead of a static API key. We mint a fresh token for every request.
- */
-function generateKlingToken() {
-  const accessKey = process.env.KLING_ACCESS_KEY;
-  const secretKey = process.env.KLING_SECRET_KEY;
-
-  if (!accessKey || !secretKey) {
-    throw new Error(
-      "Missing KLING_ACCESS_KEY / KLING_SECRET_KEY. Add them to your .env file."
-    );
-  }
-
-  const now = Math.floor(Date.now() / 1000);
-  const payload = {
-    iss: accessKey,
-    exp: now + 1800, // 30 minutes
-    nbf: now - 5,
-  };
-
-  return jwt.sign(payload, secretKey, { algorithm: "HS256" });
-}
+// Kling AI's newer accounts use a single API Key sent as a Bearer token
+// (no JWT signing needed). This matches keys that look like:
+//   api-key-kling-XXXXXXXXXXXXXXXX
+const KLING_API_BASE = process.env.KLING_API_BASE || "https://api-singapore.klingai.com";
 
 function klingHeaders() {
+  const apiKey = process.env.KLING_API_KEY;
+  if (!apiKey) {
+    throw new Error("Missing KLING_API_KEY. Add it to your .env file / Render environment variables.");
+  }
   return {
-    Authorization: `Bearer ${generateKlingToken()}`,
+    Authorization: `Bearer ${apiKey}`,
     "Content-Type": "application/json",
   };
 }
 
-/**
- * Submit an image-to-video generation task.
- * @param {Object} opts
- * @param {string} opts.imageBase64 - base64-encoded image (no data: prefix)
- * @param {string} opts.prompt - motion / creative direction prompt
- * @param {string} [opts.negativePrompt]
- * @param {string} [opts.duration] - "5" or "10"
- * @param {string} [opts.mode] - "std" or "pro"
- * @param {string} [opts.modelName] - e.g. "kling-v1-6"
- * @returns {Promise<string>} task_id
- */
 async function submitImageToVideoTask({
   imageBase64,
   prompt,
@@ -74,14 +45,6 @@ async function submitImageToVideoTask({
   return taskId;
 }
 
-/**
- * Poll a task until it completes, fails, or times out.
- * @param {string} taskId
- * @param {Object} [opts]
- * @param {number} [opts.intervalMs=5000]
- * @param {number} [opts.timeoutMs=600000] - 10 minutes
- * @returns {Promise<string>} the final video URL
- */
 async function pollImageToVideoTask(
   taskId,
   { intervalMs = 5000, timeoutMs = 600000 } = {}
@@ -111,7 +74,6 @@ async function pollImageToVideoTask(
       );
     }
 
-    // status is likely "submitted" or "processing" — keep waiting
     await new Promise((r) => setTimeout(r, intervalMs));
   }
 
